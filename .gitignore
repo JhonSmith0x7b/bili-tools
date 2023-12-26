@@ -1,0 +1,8 @@
+.env
+*.swp
+*.pyc
+*.bin
+*.model
+*.pth
+bert_vits2/data/
+.vscode
