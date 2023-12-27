@@ -16,6 +16,8 @@ import datetime
 import scipy.io.wavfile
 import logging
 import common
+from dotenv import load_dotenv
+load_dotenv()
 
 
 device = (

@@ -58,7 +58,7 @@ async def tts(text: str) -> None:
             }))
     temp_audio = io.BytesIO(resp.content)
     rate, data = scipy.io.wavfile.read(temp_audio)
-    data = data * 2
+    data = data * float(os.environ.get('VOLUME'))
     await loop.run_in_executor(
         process_executor,
         functools.partial(
