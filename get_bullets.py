@@ -113,7 +113,6 @@ async def gpt(text: str, bk: list[dict[str, str]]) -> str:
             "content": re_message['content']
         }
     )
-    bk = bk[len(bk)-10:]
     return resp.json()['choices'][0]['message']['content']
 
 
@@ -130,6 +129,7 @@ async def loop_main() -> None:
                 if text in simple_bk: continue
                 try:
                     await tts(text)
+                    simple_tts_bk = simple_tts_bk[-10:]
                     gpt_re = await gpt(text, bk=simple_tts_bk)
                     if gpt_re != None: await tts(gpt_re[:120])
                 except Exception as e:
