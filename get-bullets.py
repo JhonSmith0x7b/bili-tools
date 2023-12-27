@@ -10,6 +10,9 @@ import io
 import scipy.io.wavfile
 from dotenv import load_dotenv
 load_dotenv()
+import datetime
+import logging
+import common
 
 
 def get_bullets(room_id:str) -> list[tuple[str, str]]:
@@ -75,6 +78,7 @@ def gpt(text: str) -> str:
 def loop_main() -> None:
     simple_bk = []
     while True:
+        start_ts = datetime.datetime.now().timestamp()
         try:
             re = get_bullets(os.environ.get("ROOM_ID"))
             start = 0 if len(re)-5<0 else len(re)-5
@@ -93,7 +97,9 @@ def loop_main() -> None:
         except Exception as e:
             print(e)
             traceback.print_exc()
-        time.sleep(5)
+        sleep_second = 5 - int(datetime.datetime.now().timestamp() - start_ts)
+        if sleep_second<0:sleep_second=0
+        time.sleep(sleep_second)
 
 
 def test() -> None:
@@ -103,6 +109,7 @@ def test() -> None:
 
 
 if __name__ == '__main__':
+    common.init_log("bullets_")
     loop_main()
     # test()
 
