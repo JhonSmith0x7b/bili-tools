@@ -71,38 +71,55 @@ async def tts(text: str) -> None:
 
 
 @common.wrap_log_ts
-async def gpt(text: str) -> str:
+async def gpt(text: str, bk: list[dict[str, str]]) -> str:
     if not (text.startswith("::") or text.startswith("：：")): return None
     endpoint = os.environ.get("AZURE_ENDPOINT")
     api_key = os.environ.get("AZURE_API_KEY")
     model = os.environ.get("AZURE_MODEL")
     url = f"{endpoint}/openai/deployments/{model}/chat/completions?api-version=2023-03-15-preview"
+    messages = [
+        {
+            "role": "system",
+            "content": "你是个中文助手, 同时是个万能的女仆, 你的名字叫做小鸣, 说话要像木之本櫻一样可爱, 需要保证你的回复少于一百字. "
+        },
+        {
+            "role": "user",
+            "content": text
+        }
+    ]
+    messages.extend(bk)
+    new_message = {
+        "role": "user",
+        "content": text
+    }
+    messages.append(new_message)
     resp = await loop.run_in_executor(
         None, 
         functools.partial(requests.post, 
         url=url,
         headers={"Content-Type": "application/json", "api-key": api_key},
         json={
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "你是个中文助手, 同时是个万能的女仆, 你的名字叫做小鸣, 说话要像木之本櫻一样可爱, 需要保证你的回复少于一百字. "
-                },
-                {
-                    "role": "user",
-                    "content": text
-                }
-            ]
+            "messages": messages
         }
         )
     )
     if resp.json()['choices'][0]['finish_reason'] == "content_filter":
         return "呼呼呼!!!小鸣决定不回答这个问题!"
+    re_message = resp.json()['choices'][0]['message']
+    bk.append(new_message)
+    bk.append(
+        {
+            "role": re_message['role'],
+            "content": re_message['content']
+        }
+    )
+    bk = bk[len(bk)-10:]
     return resp.json()['choices'][0]['message']['content']
 
 
 async def loop_main() -> None:
     simple_bk = []
+    simple_tts_bk = []
     while True:
         start_ts = common.now_ts()
         try:
@@ -113,7 +130,7 @@ async def loop_main() -> None:
                 if text in simple_bk: continue
                 try:
                     await tts(text)
-                    gpt_re = await gpt(text)
+                    gpt_re = await gpt(text, bk=simple_tts_bk)
                     if gpt_re != None: await tts(gpt_re[:120])
                 except Exception as e:
                     print(e)
