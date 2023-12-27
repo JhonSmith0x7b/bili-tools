@@ -171,7 +171,10 @@ def _g2p(segments):
 def text_normalize(text):
     numbers = re.findall(r"\d+(?:\.?\d+)?", text)
     for number in numbers:
-        text = text.replace(number, cn2an.an2cn(number), 1)
+        try:
+            text = text.replace(number, cn2an.an2cn(number), 1)
+        except:
+            pass
     text = replace_punctuation(text)
     return text
 
