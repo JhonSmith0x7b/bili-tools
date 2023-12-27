@@ -114,7 +114,7 @@ async def loop_main() -> None:
                 try:
                     await tts(text)
                     gpt_re = await gpt(text)
-                    if gpt_re != None: await tts(gpt_re[:200])
+                    if gpt_re != None: await tts(gpt_re[:120])
                 except Exception as e:
                     print(e)
                     traceback.print_exc()
