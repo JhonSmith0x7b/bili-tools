@@ -14,6 +14,25 @@ import requests
 import io
 import datetime
 import scipy.io.wavfile
+import logging
+
+
+def init_log(log_path=""):
+    log_formatter = logging.Formatter("%(asctime)s %(process)s %(thread)s %(filename)s [%(levelname)-5.5s] %(message)s")
+    # 1. file handler
+    from logging.handlers import TimedRotatingFileHandler
+    file_handler = TimedRotatingFileHandler('%smain.log' % log_path, when='midnight')
+    file_handler.suffix = '%Y_%m_%d.log'
+    file_handler.setFormatter(log_formatter)
+    # 2. stream handler
+    std_handler = logging.StreamHandler(sys.stdout)
+    std_handler.setFormatter(log_formatter)
+    logger = logging.getLogger()
+    # 3. add handler
+    logger.addHandler(file_handler)
+    logger.addHandler(std_handler)
+    logger.setLevel(logging.DEBUG)
+    logging.debug('init logging succ')
 
 
 device = (
@@ -98,6 +117,7 @@ app = flask.Flask(__name__)
 
 @app.route("/simple-tts")
 def simple_tts() -> flask.Response:
+    start_ts = datetime.datetime.now().timestamp()
     text = flask.request.args.get("text")
     try:
         sdp_ratio = float(flask.request.args.get('sdp_ratio'))
@@ -113,6 +133,7 @@ def simple_tts() -> flask.Response:
     audio, rate = simple_audio(text, sdp_ratio=sdp_ratio, noise_scale=noise_scale, noise_scale_w=noise_scale_w, length_scale=length_scale)
     audio_buffer = io.BytesIO()
     scipy.io.wavfile.write(audio_buffer, rate, audio)
+    logging.info(f"tts cost {datetime.datetime.now().timestamp() - start_ts} s")
     return flask.send_file(
         audio_buffer,
         mimetype="audio/wav"
@@ -120,4 +141,5 @@ def simple_tts() -> flask.Response:
 
 
 if __name__ == '__main__':
+    init_log()
     app.run("0.0.0.0", "12300")
