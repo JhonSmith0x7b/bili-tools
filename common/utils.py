@@ -1,9 +1,11 @@
 
 import sys
 import logging
+import datetime
+from collections.abc import Callable
 
 
-def init_log(log_path="", level=logging.INFO):
+def init_log(log_path="", level=logging.INFO) -> None:
     log_formatter = logging.Formatter("%(asctime)s %(process)s %(thread)s %(filename)s [%(levelname)-5.5s] %(message)s")
     # 1. file handler
     from logging.handlers import TimedRotatingFileHandler
@@ -20,3 +22,15 @@ def init_log(log_path="", level=logging.INFO):
     logger.setLevel(level)
     logging.debug('init logging succ')
 
+
+def now_ts() -> float:
+    return datetime.datetime.now().timestamp()
+
+
+def wrap_log_ts(func: Callable) -> None:
+    def inner(*args, **kwargs):
+        ts = now_ts()
+        re = func(*args, **kwargs)
+        logging.info(f"{func.__name__} cost {format(now_ts()-ts, '.3f')}s")
+        return re
+    return inner

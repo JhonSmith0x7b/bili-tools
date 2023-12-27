@@ -39,6 +39,8 @@ net_g = get_net_g(
     model_path=model_path, version=version, device=device, hps=hps
 )
 
+
+@common.wrap_log_ts
 def simple_audio(
     text: str,
     language: str = 'ZH',
@@ -100,7 +102,6 @@ app = flask.Flask(__name__)
 
 @app.route("/simple-tts")
 def simple_tts() -> flask.Response:
-    start_ts = datetime.datetime.now().timestamp()
     text = flask.request.args.get("text")
     try:
         sdp_ratio = float(flask.request.args.get('sdp_ratio'))
@@ -116,7 +117,6 @@ def simple_tts() -> flask.Response:
     audio, rate = simple_audio(text, sdp_ratio=sdp_ratio, noise_scale=noise_scale, noise_scale_w=noise_scale_w, length_scale=length_scale)
     audio_buffer = io.BytesIO()
     scipy.io.wavfile.write(audio_buffer, rate, audio)
-    logging.info(f"tts cost {datetime.datetime.now().timestamp() - start_ts} s")
     return flask.send_file(
         audio_buffer,
         mimetype="audio/wav"

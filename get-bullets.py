@@ -34,6 +34,7 @@ def get_bullets(room_id:str) -> list[tuple[str, str]]:
     return re
 
 
+@common.wrap_log_ts
 def tts(text: str) -> None:
     url = os.environ.get("TTS_ENDPOINT")
     resp = requests.get(url, params={
@@ -48,6 +49,7 @@ def tts(text: str) -> None:
     sd.play(data, rate, blocking=True)
 
 
+@common.wrap_log_ts
 def gpt(text: str) -> str:
     if not (text.startswith("::") or text.startswith("：：")): return None
     endpoint = os.environ.get("AZURE_ENDPOINT")
@@ -78,7 +80,7 @@ def gpt(text: str) -> str:
 def loop_main() -> None:
     simple_bk = []
     while True:
-        start_ts = datetime.datetime.now().timestamp()
+        start_ts = common.now_ts()
         try:
             re = get_bullets(os.environ.get("ROOM_ID"))
             start = 0 if len(re)-5<0 else len(re)-5
@@ -97,8 +99,9 @@ def loop_main() -> None:
         except Exception as e:
             print(e)
             traceback.print_exc()
-        sleep_second = 5 - int(datetime.datetime.now().timestamp() - start_ts)
+        sleep_second = 5 - int(common.now_ts() - start_ts)
         if sleep_second<0:sleep_second=0
+        logging.info(f"next loop after {sleep_second}s")
         time.sleep(sleep_second)
 
 
