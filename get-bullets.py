@@ -46,7 +46,7 @@ def tts(text: str) -> None:
     })
     temp_audio = io.BytesIO(resp.content)
     rate, data = scipy.io.wavfile.read(temp_audio)
-    data = data * 5
+    data = data * 3
     sd.play(data, rate, blocking=True)
 
 
