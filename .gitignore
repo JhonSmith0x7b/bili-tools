@@ -6,3 +6,4 @@
 *.pth
 bert_vits2/data/
 .vscode
+*.log
