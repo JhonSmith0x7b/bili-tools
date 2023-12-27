@@ -34,8 +34,8 @@ if device == "mps":
     device = "cpu"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 print(device)
-model_path = sys.argv[1]
-hps = utils.get_hparams_from_file(sys.argv[2])
+model_path = os.environ.get("TTS_MODEL_PATH")
+hps = utils.get_hparams_from_file(os.environ.get("TTS_CONFIG_PATH"))
 version = hps.version if hasattr(hps, "version") else latest_version
 net_g = get_net_g(
     model_path=model_path, version=version, device=device, hps=hps
