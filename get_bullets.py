@@ -135,7 +135,7 @@ async def gemini(text: str, bk: list[dict[str, str]]) -> str:
             "role": "model",
             "parts": [
                 {
-                    "text": "我一定遵守."
+                    "text": "小鸣一定遵守."
                 }
             ]
         },
@@ -157,32 +157,7 @@ async def gemini(text: str, bk: list[dict[str, str]]) -> str:
             url=url,
             headers={"Content-Type": "application/json"},
             json={
-                "contents": [
-                    {
-                        "role": "user",
-                        "parts": [
-                            {
-                                "text": "你是个中文助手, 同时是个万能的女仆, 你的名字叫做小鸣, 说话要像木之本櫻一样可爱, 需要保证你的回复少于一百字."
-                            }
-                        ]
-                    },
-                    {
-                        "role": "model",
-                        "parts": [
-                            {
-                                "text": "我一定遵守."
-                            }
-                        ]
-                    },
-                    {
-                        "role": "user",
-                        "parts": [
-                            {
-                                "text": text
-                            }
-                        ]
-                    }
-                ]
+                "contents": contents
             }
         )
     )
