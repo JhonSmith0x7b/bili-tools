@@ -115,10 +115,89 @@ async def gpt(text: str, bk: list[dict[str, str]]) -> str:
     )
     return resp.json()['choices'][0]['message']['content']
 
+@common.wrap_log_ts
+async def gemini(text: str, bk: list[dict[str, str]]) -> str:
+    if not (text.startswith("--") or text.startswith("——")): return None
+    print(bk)
+    endpoint = "https://generativelanguage.googleapis.com/"
+    model = "gemini-pro:generateContent"
+    api_key = os.environ.get("GEMINI_API_KEY")
+    url = f"{endpoint}v1/models/{model}?key={api_key}"
+    contents = [
+        {
+            "role": "user",
+            "parts": [
+                {
+                    "text": "你是个中文助手, 同时是个万能的女仆, 你的名字叫做小鸣, 说话要像木之本櫻一样可爱, 需要保证你的回复少于一百字."
+                }
+            ]
+        },
+        {
+            "role": "model",
+            "parts": [
+                {
+                    "text": "我一定遵守."
+                }
+            ]
+        },
+    ]
+    contents.extend(bk)
+    new_message = {
+        "role": "user",
+        "parts": [
+                {
+                    "text": text
+                }
+        ]
+    }
+    contents.append(new_message)
+    resp = await loop.run_in_executor(
+        None,
+        functools.partial(
+            requests.post,
+            url=url,
+            headers={"Content-Type": "application/json"},
+            json={
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "text": "你是个中文助手, 同时是个万能的女仆, 你的名字叫做小鸣, 说话要像木之本櫻一样可爱, 需要保证你的回复少于一百字."
+                            }
+                        ]
+                    },
+                    {
+                        "role": "model",
+                        "parts": [
+                            {
+                                "text": "我一定遵守."
+                            }
+                        ]
+                    },
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "text": text
+                            }
+                        ]
+                    }
+                ]
+            }
+        )
+    )
+    re_message = resp.json()['candidates'][0]['content']
+    bk.append(new_message)
+    bk.append(re_message)
+    return re_message['parts'][0]['text']
+
+
 
 async def loop_main() -> None:
     simple_bk = []
-    simple_tts_bk = []
+    simple_gpt_bk = []
+    simple_gemini_bk = []
     while True:
         start_ts = common.now_ts()
         try:
@@ -129,9 +208,12 @@ async def loop_main() -> None:
                 if text in simple_bk: continue
                 try:
                     await tts(text)
-                    simple_tts_bk = simple_tts_bk[-10:]
-                    gpt_re = await gpt(text, bk=simple_tts_bk)
+                    simple_gpt_bk = simple_gpt_bk[-10:]
+                    gpt_re = await gpt(text, bk=simple_gpt_bk)
                     if gpt_re != None: await tts(gpt_re[:120])
+                    simple_gemini_bk = simple_gemini_bk[-10:]
+                    gemini_re = await gemini(text, bk=simple_gemini_bk)
+                    if gemini_re != None: await tts(gemini_re[:120])
                 except Exception as e:
                     print(e)
                     traceback.print_exc()
