@@ -118,7 +118,6 @@ async def gpt(text: str, bk: list[dict[str, str]]) -> str:
 @common.wrap_log_ts
 async def gemini(text: str, bk: list[dict[str, str]]) -> str:
     if not (text.startswith("--") or text.startswith("——")): return None
-    print(bk)
     endpoint = "https://generativelanguage.googleapis.com/"
     model = "gemini-pro:generateContent"
     api_key = os.environ.get("GEMINI_API_KEY")
