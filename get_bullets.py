@@ -15,11 +15,28 @@ import logging
 import common
 import asyncio
 import functools
-from concurrent.futures import ProcessPoolExecutor
+import multiprocessing
 
 
 loop = asyncio.get_event_loop()
-process_executor = ProcessPoolExecutor(max_workers=1)
+q = multiprocessing.Queue()
+
+
+def process_play_audio(q: multiprocessing.Queue):
+    common.init_log("audio_sub")
+    logging.info("audio process start")
+    while True:
+        audio = q.get()
+        try:
+            temp_audio = io.BytesIO(audio)
+            rate, data = scipy.io.wavfile.read(temp_audio)
+            data = data * float(os.environ.get('VOLUME'))
+            rate, data = scipy.io.wavfile.read(temp_audio)
+            data = data * float(os.environ.get('VOLUME'))
+            sd.play(data, rate, blocking=True)
+        except Exception as e:
+            traceback.print_exc()
+            logging.error(f"paly audio error {e}")
 
 
 def get_bullets(room_id:str) -> list[tuple[str, str]]:
@@ -56,18 +73,7 @@ async def tts(text: str) -> None:
                 "noise_scale_w": 0.8,
                 "length_scale": 1.0
             }))
-    temp_audio = io.BytesIO(resp.content)
-    rate, data = scipy.io.wavfile.read(temp_audio)
-    data = data * float(os.environ.get('VOLUME'))
-    await loop.run_in_executor(
-        process_executor,
-        functools.partial(
-            sd.play,
-            data,
-            rate,
-            blocking=True
-        )
-    )
+    q.put(resp.content)
 
 
 @common.wrap_log_ts
@@ -80,7 +86,7 @@ async def gpt(text: str, bk: list[dict[str, str]]) -> str:
     messages = [
         {
             "role": "system",
-            "content": "你是个中文助手, 同时是个万能的女仆, 你的名字叫做小鸣, 说话要像木之本櫻一样可爱, 需要保证你的回复少于一百字. "
+            "content": "你是个中文助手, 同时是个万能的女仆, 你的名字叫做小鸣, 说话要像木之本櫻一样可爱, 需要保证你的回复少于一百字, 并且将所有非中文内容翻译成中文."
         },
         {
             "role": "user",
@@ -127,7 +133,7 @@ async def gemini(text: str, bk: list[dict[str, str]]) -> str:
             "role": "user",
             "parts": [
                 {
-                    "text": "你是个中文助手, 同时是个万能的女仆, 你的名字叫做小鸣, 说话要像木之本櫻一样可爱, 需要保证你的回复少于一百字."
+                    "text": "你是个中文助手, 同时是个万能的女仆, 你的名字叫做小鸣, 说话要像木之本櫻一样可爱, 需要保证你的回复少于一百字, 并且将所有非中文内容翻译成中文."
                 }
             ]
         },
@@ -161,7 +167,10 @@ async def gemini(text: str, bk: list[dict[str, str]]) -> str:
             }
         )
     )
-    re_message = resp.json()['candidates'][0]['content']
+    try:
+        re_message = resp.json()['candidates'][0]['content']
+    except Exception as e:
+        logging.error(f"gemini error, response is {resp.text}")
     bk.append(new_message)
     bk.append(re_message)
     return re_message['parts'][0]['text']
@@ -181,25 +190,30 @@ async def loop_main() -> None:
                 text = re[i][1]
                 if text in simple_bk: continue
                 try:
-                    await tts(text)
+                    asyncio.ensure_future(tts(text))
                     simple_gpt_bk = simple_gpt_bk[-10:]
                     gpt_re = await gpt(text, bk=simple_gpt_bk)
-                    if gpt_re != None: await tts(gpt_re[:120])
+                    if gpt_re != None: asyncio.ensure_future(tts(gpt_re[:120]))
                     simple_gemini_bk = simple_gemini_bk[-10:]
                     gemini_re = await gemini(text, bk=simple_gemini_bk)
-                    if gemini_re != None: await tts(gemini_re[:120])
+                    if gemini_re != None: await asyncio.ensure_future(tts(gemini_re[:120]))
                 except Exception as e:
-                    print(e)
+                    logging.error(e)
                     traceback.print_exc()
                 simple_bk.append(text)
             simple_bk = simple_bk[len(simple_bk)-100:]
         except Exception as e:
-            print(e)
+            logging.error(e)
             traceback.print_exc()
         sleep_second = 5 - int(common.now_ts() - start_ts)
         if sleep_second<0:sleep_second=0
         logging.info(f"next loop after {sleep_second}s")
         time.sleep(sleep_second)
+
+
+def main() -> None:
+    multiprocessing.Process(target=process_play_audio, args=(q,)).start()
+    loop.run_until_complete(loop_main())
 
 
 def test() -> None:
@@ -210,6 +224,6 @@ def test() -> None:
 
 if __name__ == '__main__':
     common.init_log("bullets_")
-    loop.run_until_complete(loop_main())
+    main()
     # test()
 
