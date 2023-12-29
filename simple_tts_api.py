@@ -41,6 +41,40 @@ net_g = get_net_g(
     model_path=model_path, version=version, device=device, hps=hps
 )
 
+convert_map = {
+    "A": "艾",
+    "B": "闭",
+    "C": "啬",
+    "D": "迪",
+    "E": "衣",
+    "F": "爱福",
+    "G": "记",
+    "H": "艾吃",
+    "I": "爱",
+    "J": "这",
+    "K": "客",
+    "L": "艾奥",
+    "M": "艾慕",
+    "N": "嗯",
+    "O": "鸥",
+    "P": "屁",
+    "Q": "秋",
+    "R": "啊",
+    "S": "艾斯",
+    "T": "踢",
+    "U": "呦",
+    "V": "喂",
+    "W": "大不流",
+    "X": "埃克斯",
+    "Y": "歪艾",
+    "Z": "贼"
+}
+
+def en2cn(text: str):
+    new_text = ""
+    for c in text:
+        new_text += convert_map.get(c.upper(), c)
+    return new_text
 
 @common.wrap_log_ts
 def simple_audio(
@@ -51,6 +85,7 @@ def simple_audio(
     noise_scale_w: float = 0.8,
     length_scale: float = 1.0
 ) -> tuple[numpy.ndarray, int]:
+    text = en2cn(text)
     bert, ja_bert, en_bert, phones, tones, lang_ids = get_text(text, language, hps, device)
     x_tst = phones.to(device).unsqueeze(0)
     tones = tones.to(device).unsqueeze(0)
