@@ -190,10 +190,10 @@ async def loop_main() -> None:
                 text = re[i][1]
                 if text in simple_bk: continue
                 try:
-                    asyncio.ensure_future(tts(text))
+                    await asyncio.ensure_future(tts(text))
                     simple_gpt_bk = simple_gpt_bk[-10:]
                     gpt_re = await gpt(text, bk=simple_gpt_bk)
-                    if gpt_re != None: asyncio.ensure_future(tts(gpt_re[:120]))
+                    if gpt_re != None: await asyncio.ensure_future(tts(gpt_re[:120]))
                     simple_gemini_bk = simple_gemini_bk[-10:]
                     gemini_re = await gemini(text, bk=simple_gemini_bk)
                     if gemini_re != None: await asyncio.ensure_future(tts(gemini_re[:120]))
