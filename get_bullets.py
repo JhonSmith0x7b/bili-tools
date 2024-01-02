@@ -19,8 +19,8 @@ import multiprocessing
 from collections.abc import Callable
 
 
-loop = asyncio.get_event_loop()
-q = multiprocessing.Queue()
+LOOP = asyncio.get_event_loop()
+Q = multiprocessing.Queue()
 
 
 def process_play_audio(q: multiprocessing.Queue):
@@ -60,7 +60,7 @@ def get_bullets(room_id:str) -> list[tuple[str, str]]:
 @common.wrap_log_ts_async
 async def tts(text: str) -> None:
     url = os.environ.get("TTS_ENDPOINT")
-    resp = await loop.run_in_executor(
+    resp = await LOOP.run_in_executor(
         None,
         functools.partial(
             requests.get,
@@ -72,115 +72,126 @@ async def tts(text: str) -> None:
                 "noise_scale_w": 0.8,
                 "length_scale": 1.0
             }))
-    q.put(resp.content)
+    Q.put(resp.content)
 
 
 def llm_clo() -> str:
     simple_gpt_bk = []
+    gpt = gpt_clo(simple_gpt_bk)
     simple_gemini_bk = []
+    gemini = gemini_clo(simple_gemini_bk)
     @common.wrap_log_ts_async
     async def llm_inner(text: str) -> str:
         common.lru_pop(simple_gpt_bk, simple_gemini_bk)
-        if (text.startswith("::") or text.startswith("：：")): return await gpt(text, simple_gpt_bk)
-        if (text.startswith("--") or text.startswith("——")): return await gemini(text, simple_gemini_bk)
+        if (text.startswith("::") or text.startswith("：：")): return await gpt(text)
+        if (text.startswith("--") or text.startswith("——")): return await gemini(text)
         return None
     return llm_inner
 
 
-async def gpt(text: str, bk: list[dict[str, str]]) -> str:
+def gpt_clo(bk: list[dict[str, str]]) -> Callable:
     endpoint = os.environ.get("AZURE_ENDPOINT")
     api_key = os.environ.get("AZURE_API_KEY")
     model = os.environ.get("AZURE_MODEL")
     url = f"{endpoint}/openai/deployments/{model}/chat/completions?api-version=2023-03-15-preview"
-    messages = [
-        {
-            "role": "system",
-            "content": "你是个中文助手, 同时是个万能的女仆, 你的名字叫做小鸣, 说话要像木之本櫻一样可爱, 需要保证你的回复少于一百字, 并且将所有非中文内容翻译成中文."
-        },
-        {
+    init_prompt = open("./prompts/bullet_init.txt").read()
+    error_prompt = open("./prompts/bullet_error.txt").read()
+    async def gpt_inner(text) -> str:
+        messages = [
+            {
+                "role": "system",
+                "content": init_prompt
+            },
+            {
+                "role": "user",
+                "content": text
+            }
+        ]
+        messages.extend(bk)
+        new_message = {
             "role": "user",
             "content": text
         }
-    ]
-    messages.extend(bk)
-    new_message = {
-        "role": "user",
-        "content": text
-    }
-    messages.append(new_message)
-    resp = await loop.run_in_executor(
-        None, 
-        functools.partial(requests.post, 
-        url=url,
-        headers={"Content-Type": "application/json", "api-key": api_key},
-        json={
-            "messages": messages
-        }
+        messages.append(new_message)
+        resp = await LOOP.run_in_executor(
+            None, 
+            functools.partial(requests.post, 
+            url=url,
+            headers={"Content-Type": "application/json", "api-key": api_key},
+            json={
+                "messages": messages
+            }
+            )
         )
-    )
-    if resp.json()['choices'][0]['finish_reason'] == "content_filter":
-        return "呼呼呼!!!小鸣决定不回答这个问题!"
-    re_message = resp.json()['choices'][0]['message']
-    bk.append(new_message)
-    bk.append(
-        {
-            "role": re_message['role'],
-            "content": re_message['content']
-        }
-    )
-    return resp.json()['choices'][0]['message']['content']
+        if resp.json()['choices'][0]['finish_reason'] == "content_filter":
+            return error_prompt
+        re_message = resp.json()['choices'][0]['message']
+        bk.append(new_message)
+        bk.append(
+            {
+                "role": re_message['role'],
+                "content": re_message['content']
+            }
+        )
+        return resp.json()['choices'][0]['message']['content']
+    return gpt_inner
 
-async def gemini(text: str, bk: list[dict[str, str]]) -> str:
+
+def gemini_clo(bk: list[dict[str, str]]) -> Callable:
     endpoint = "https://generativelanguage.googleapis.com/"
     model = "gemini-pro:generateContent"
     api_key = os.environ.get("GEMINI_API_KEY")
     url = f"{endpoint}v1/models/{model}?key={api_key}"
-    contents = [
-        {
+    init_prompt = open("./prompts/bullet_init.txt").read()
+    error_prompt = open("./prompts/bullet_error.txt").read()
+    async def gemini_inner(text: str) -> str:
+        contents = [
+            {
+                "role": "user",
+                "parts": [
+                    {
+                        "text": init_prompt
+                    }
+                ]
+            },
+            {
+                "role": "model",
+                "parts": [
+                    {
+                        "text": "我一定遵守."
+                    }
+                ]
+            },
+        ]
+        contents.extend(bk)
+        new_message = {
             "role": "user",
             "parts": [
-                {
-                    "text": "你是个中文助手, 同时是个万能的女仆, 你的名字叫做小鸣, 说话要像木之本櫻一样可爱, 需要保证你的回复少于一百字, 并且将所有非中文内容翻译成中文."
-                }
+                    {
+                        "text": text
+                    }
             ]
-        },
-        {
-            "role": "model",
-            "parts": [
-                {
-                    "text": "小鸣一定遵守."
+        }
+        contents.append(new_message)
+        resp = await LOOP.run_in_executor(
+            None,
+            functools.partial(
+                requests.post,
+                url=url,
+                headers={"Content-Type": "application/json"},
+                json={
+                    "contents": contents
                 }
-            ]
-        },
-    ]
-    contents.extend(bk)
-    new_message = {
-        "role": "user",
-        "parts": [
-                {
-                    "text": text
-                }
-        ]
-    }
-    contents.append(new_message)
-    resp = await loop.run_in_executor(
-        None,
-        functools.partial(
-            requests.post,
-            url=url,
-            headers={"Content-Type": "application/json"},
-            json={
-                "contents": contents
-            }
+            )
         )
-    )
-    try:
-        re_message = resp.json()['candidates'][0]['content']
-    except Exception as e:
-        logging.error(f"gemini error, response is {resp.text}")
-    bk.append(new_message)
-    bk.append(re_message)
-    return re_message['parts'][0]['text']
+        try:
+            re_message = resp.json()['candidates'][0]['content']
+        except Exception as e:
+            logging.error(f"gemini error, response is {resp.text}")
+        bk.append(new_message)
+        bk.append(re_message)
+        return re_message['parts'][0]['text']
+    return gemini_inner
 
 
 
@@ -217,11 +228,12 @@ async def loop_main() -> None:
 
 
 def main() -> None:
-    multiprocessing.Process(target=process_play_audio, args=(q,)).start()
-    loop.run_until_complete(loop_main())
+    multiprocessing.Process(target=process_play_audio, args=(Q,)).start()
+    LOOP.run_until_complete(loop_main())
 
 
 def test() -> None:
+    gpt = gpt_clo(bk=[])
     re = gpt("::测试弹幕")
     tts(re)
 
