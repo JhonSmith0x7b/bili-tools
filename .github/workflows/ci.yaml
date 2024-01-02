@@ -1,0 +1,30 @@
+name: bili-toos-ci
+
+on:
+  push:
+    branches: [release]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # strategy:
+      # matrix:
+        # python-version: ["3.9", "3.10"]
+    steps:
+      - uses: actions/checkout@v3
+      - name: ls
+        run: ls
+      - name: SSH Deploy
+        run: |
+          mkdir -p ~/.ssh/
+          echo "$PRIVATE" > ../private.key
+          sudo chmod 600 ../private.key
+          echo "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i $SSH_KEY_PATH $SSH_PATH "[ -d bili-tools ] || git clone git@github.com:JhonSmith0x7b/bili-tools"
+        shell: bash
+        env:
+          PRIVATE: ${{secrets.PRIVATE}}
+          KNOWN_HOSTS: ${{secrets.KNOWN_HOSTS}}
+          SSH_PATH: ${{secrets.SSH_PATH}}
+          SSH_KEY_PATH: ${{ github.workspace }}/../private.key
