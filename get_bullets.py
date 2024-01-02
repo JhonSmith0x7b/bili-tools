@@ -16,6 +16,7 @@ import common
 import asyncio
 import functools
 import multiprocessing
+from collections.abc import Callable
 
 
 loop = asyncio.get_event_loop()
@@ -29,8 +30,6 @@ def process_play_audio(q: multiprocessing.Queue):
         audio = q.get()
         try:
             temp_audio = io.BytesIO(audio)
-            rate, data = scipy.io.wavfile.read(temp_audio)
-            data = data * float(os.environ.get('VOLUME'))
             rate, data = scipy.io.wavfile.read(temp_audio)
             data = data * float(os.environ.get('VOLUME'))
             sd.play(data, rate, blocking=True)
@@ -58,7 +57,7 @@ def get_bullets(room_id:str) -> list[tuple[str, str]]:
     return re
 
 
-@common.wrap_log_ts
+@common.wrap_log_ts_async
 async def tts(text: str) -> None:
     url = os.environ.get("TTS_ENDPOINT")
     resp = await loop.run_in_executor(
@@ -76,9 +75,19 @@ async def tts(text: str) -> None:
     q.put(resp.content)
 
 
-@common.wrap_log_ts
+def llm_clo() -> str:
+    simple_gpt_bk = []
+    simple_gemini_bk = []
+    @common.wrap_log_ts_async
+    async def llm_inner(text: str) -> str:
+        common.lru_pop(simple_gpt_bk, simple_gemini_bk)
+        if (text.startswith("::") or text.startswith("：：")): return await gpt(text, simple_gpt_bk)
+        if (text.startswith("--") or text.startswith("——")): return await gemini(text, simple_gemini_bk)
+        return None
+    return llm_inner
+
+
 async def gpt(text: str, bk: list[dict[str, str]]) -> str:
-    if not (text.startswith("::") or text.startswith("：：")): return None
     endpoint = os.environ.get("AZURE_ENDPOINT")
     api_key = os.environ.get("AZURE_API_KEY")
     model = os.environ.get("AZURE_MODEL")
@@ -121,9 +130,7 @@ async def gpt(text: str, bk: list[dict[str, str]]) -> str:
     )
     return resp.json()['choices'][0]['message']['content']
 
-@common.wrap_log_ts
 async def gemini(text: str, bk: list[dict[str, str]]) -> str:
-    if not (text.startswith("--") or text.startswith("——")): return None
     endpoint = "https://generativelanguage.googleapis.com/"
     model = "gemini-pro:generateContent"
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -179,8 +186,7 @@ async def gemini(text: str, bk: list[dict[str, str]]) -> str:
 
 async def loop_main() -> None:
     simple_bk = []
-    simple_gpt_bk = []
-    simple_gemini_bk = []
+    llm = llm_clo()
     while True:
         start_ts = common.now_ts()
         try:
@@ -190,18 +196,17 @@ async def loop_main() -> None:
                 text = re[i][1]
                 if text in simple_bk: continue
                 try:
-                    await asyncio.ensure_future(tts(text))
-                    simple_gpt_bk = simple_gpt_bk[-10:]
-                    gpt_re = await gpt(text, bk=simple_gpt_bk)
-                    if gpt_re != None: await asyncio.ensure_future(tts(gpt_re[:120]))
-                    simple_gemini_bk = simple_gemini_bk[-10:]
-                    gemini_re = await gemini(text, bk=simple_gemini_bk)
-                    if gemini_re != None: await asyncio.ensure_future(tts(gemini_re[:120]))
+                    task_audio = asyncio.ensure_future(tts(text))
+                    task_llm = asyncio.ensure_future(llm(text))
+                    results = await asyncio.gather(task_audio, task_llm)
+                    for result in results:
+                        if result is None: continue
+                        await tts(result[:120])
                 except Exception as e:
                     logging.error(e)
                     traceback.print_exc()
                 simple_bk.append(text)
-            simple_bk = simple_bk[len(simple_bk)-100:]
+            simple_bk = simple_bk[-100:]
         except Exception as e:
             logging.error(e)
             traceback.print_exc()

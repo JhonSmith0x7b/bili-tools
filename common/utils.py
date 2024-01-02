@@ -34,3 +34,17 @@ def wrap_log_ts(func: Callable) -> None:
         logging.info(f"{func.__name__} cost {format(now_ts()-ts, '.3f')}s")
         return re
     return inner
+
+
+def wrap_log_ts_async(func: Callable) -> None:
+    async def inner(*args, **kwargs):
+        ts = now_ts()
+        re = await func(*args, **kwargs)
+        logging.info(f"{func.__name__} cost {format(now_ts()-ts, '.3f')}s")
+        return re
+    return inner
+
+
+def lru_pop(*arrays: list, max_length: int=10) -> None:
+    for array in arrays:
+        while len(array) > max_length: array.pop(0)
