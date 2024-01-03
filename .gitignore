@@ -5,5 +5,9 @@
 *.model
 *.pth
 bert_vits2/data/
-.vscode
+.vscode/
 *.log
+dist/
+node_modules/
+Resources/
+

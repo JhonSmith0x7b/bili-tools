@@ -33,4 +33,5 @@ langid
 scipy
 python-dotenv
 sounddevice
-PyQt6
+PySide6
+pyinstaller
