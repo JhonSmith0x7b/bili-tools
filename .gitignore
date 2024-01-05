@@ -9,5 +9,3 @@ bert_vits2/data/
 *.log
 dist/
 node_modules/
-Resources/
-
