@@ -20,12 +20,10 @@ import logging
 import common
 import asyncio
 import functools
-import multiprocessing
 from collections.abc import Callable
-
-
-LOOP = asyncio.get_event_loop()
-Q = multiprocessing.Queue()
+import signal
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
 
 
 def process_play_audio(q: multiprocessing.Queue):
@@ -40,7 +38,9 @@ def process_play_audio(q: multiprocessing.Queue):
             sd.play(data, rate, blocking=True)
         except Exception as e:
             traceback.print_exc()
-            logging.error(f"paly audio error {e}")
+            logging.error(f"play audio error {e}")
+        
+            
 
 
 def get_bullets(room_id:str) -> list[tuple[str, str]]:
@@ -294,12 +294,20 @@ class BackSignThread(QThread):
 
 def main() -> None:
     common.init_log("qt_")
-    multiprocessing.Process(target=process_play_audio, args=(Q,)).start()
+    # p = multiprocessing.Process(target=process_play_audio, args=(Q,), daemon=True)
+    # p.start()
+    pool = ProcessPoolExecutor(1)
+    task = pool.submit(process_play_audio, Q)
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
-    app.exec()
+    sys.exit(app.exec())
 
 
 if __name__ == '__main__':
+    # kill process and qt process
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    multiprocessing.freeze_support()
+    LOOP = asyncio.get_event_loop()
+    Q = multiprocessing.Manager().Queue()
     main()
