@@ -22,9 +22,7 @@ import common
 import asyncio
 import functools
 from collections.abc import Callable
-import signal
 import multiprocessing
-from concurrent.futures import ProcessPoolExecutor
 
 
 def process_play_audio(q: multiprocessing.Queue):
