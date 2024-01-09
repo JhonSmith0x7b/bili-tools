@@ -1,4 +1,5 @@
 import sys
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWebEngineWidgets import *
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
@@ -200,7 +201,7 @@ def gemini_clo(bk: list[dict[str, str]]) -> Callable:
     return gemini_inner
 
 
-async def loop_main(signal: QObject) -> None:
+async def loop_bullets(signal: QObject) -> None:
     simple_bk = []
     llm = llm_clo()
     while True:
@@ -220,12 +221,12 @@ async def loop_main(signal: QObject) -> None:
                         await tts(result[:120])
                         signal.sig.emit(f"{text}<br>{result[:120]}")
                 except Exception as e:
-                    logging.error(e)
+                    logging.error(f"{e}")
                     traceback.print_exc()
                 simple_bk.append(text)
             simple_bk = simple_bk[-100:]
         except Exception as e:
-            logging.error(e)
+            logging.error(f"{e}")
             traceback.print_exc()
         sleep_second = 5 - int(common.now_ts() - start_ts)
         if sleep_second<0:sleep_second=0
@@ -276,37 +277,57 @@ class MainWindow(QWidget):
         self.back_thread.start()
         self.back_thread.signal.sig.connect(self.signal_update)
     
-
     def signal_update(self, data: str) -> None:
         self.text_edit.setHtml(data)
+    
+    # close 
+    def closeEvent(self, event: QCloseEvent) -> None:
+        logging.info("Close event")
+        super().closeEvent(event)
+        self.back_thread.terminate()
+        self.close()
 
 
 class BackSignThread(QThread):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.signal = BaseSignal()
-    
 
     def run(self) -> None:
         logging.info("qt sign thread start")
-        LOOP.run_until_complete(loop_main(self.signal))
-
+        LOOP.run_until_complete(loop_bullets(self.signal))
+    
+    # close
+    def terminate(self) -> None:
+        logging.info("terminate qt sign thread")
+        super().terminate()
+        self.wait()
+    
 
 def main() -> None:
     common.init_log("qt_")
-    # p = multiprocessing.Process(target=process_play_audio, args=(Q,), daemon=True)
-    # p.start()
-    pool = ProcessPoolExecutor(1)
-    task = pool.submit(process_play_audio, Q)
+    p = multiprocessing.Process(target=process_play_audio, args=(Q,), daemon=True)
+    p.start()
+    # pool = ProcessPoolExecutor(1)
+    # task = pool.submit(process_play_audio, Q)
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
-    sys.exit(app.exec())
+    try:
+        app.exec()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        p.terminate()
+        p.join()
+        p.close()
+        logging.info("End, close resources.")
+        sys.exit(0)
 
 
 if __name__ == '__main__':
     # kill process and qt process
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    # signal.signal(signal.SIGINT, signal.SIG_DFL)
     multiprocessing.freeze_support()
     LOOP = asyncio.get_event_loop()
     Q = multiprocessing.Manager().Queue()
