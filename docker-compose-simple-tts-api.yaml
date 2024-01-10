@@ -8,3 +8,4 @@ services:
       - ./bert_vits2:/app/bert_vits2
       - ./common:/app/common
       - ./nltk_data:/nltk_data
+      - ./.env:/app/.env

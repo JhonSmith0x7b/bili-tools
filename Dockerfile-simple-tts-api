@@ -5,7 +5,6 @@ WORKDIR /app
 
 COPY ./simple_tts_api.py /app/simple_tts_api.py
 COPY ./scripts_simple_tts_api/requirements.txt /app/requirements.txt
-COPY ./.env /app/.env
 
 RUN pip install -r requirements.txt
 
