@@ -33,3 +33,4 @@ langid
 scipy
 python-dotenv
 sounddevice
+flask
