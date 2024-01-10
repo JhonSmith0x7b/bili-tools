@@ -1,0 +1,11 @@
+version: '3'
+services:
+  web:
+    image: torch-gpu
+    ports:
+      - 12303:12300
+    volumes:
+      - ./bert_vits2:/app/bert_vits2
+      - ./common:/app/common
+      - ./nltk_data:/nltk_data
+      - ./.env:/app/.env

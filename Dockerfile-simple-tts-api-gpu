@@ -1,0 +1,11 @@
+FROM anibali/pytorch:2.0.1-cuda11.8
+USER root
+RUN mkdir -p /app
+WORKDIR /app
+
+COPY ./simple_tts_api.py /app/simple_tts_api.py
+COPY ./scripts_simple_tts_api/requirements.txt /app/requirements.txt
+
+RUN pip install -r requirements.txt
+
+CMD ["python", "./simple_tts_api.py"]
