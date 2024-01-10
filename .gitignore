@@ -11,3 +11,5 @@ dist/
 node_modules/
 *.spec
 build/
+live2d_sample/
+nltk_data/
