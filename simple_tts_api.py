@@ -3,10 +3,7 @@ sys.path.append("./bert_vits2")
 import os
 import torch
 from bert_vits2 import utils
-from bert_vits2.text.cleaner import clean_text
-from bert_vits2.text import cleaned_text_to_sequence, get_bert
-from bert_vits2 import commons
-from bert_vits2.infer import infer, latest_version, get_net_g, get_text, infer_multilang
+from bert_vits2.infer import infer, latest_version, get_net_g, get_text
 import numpy
 import flask
 import json
