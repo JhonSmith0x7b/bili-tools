@@ -9,3 +9,10 @@ services:
       - ./common:/app/common
       - ./nltk_data:/usr/share/nltk_data
       - ./.env:/app/.env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
