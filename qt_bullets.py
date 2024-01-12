@@ -23,6 +23,7 @@ import asyncio
 import functools
 from collections.abc import Callable
 import multiprocessing
+from queue import Queue
 
 
 def get_bullets(room_id:str) -> list[tuple[str, str]]:
@@ -45,7 +46,7 @@ def get_bullets(room_id:str) -> list[tuple[str, str]]:
 
 
 @common.wrap_log_ts_async
-async def tts(loop: asyncio.BaseEventLoop, q: multiprocessing.Queue, text: str) -> None:
+async def tts(loop: asyncio.BaseEventLoop, q: Queue, text: str) -> None:
     url = os.environ.get("TTS_ENDPOINT")
     resp = await loop.run_in_executor(
         None,
@@ -182,7 +183,7 @@ def gemini_clo(loop: asyncio.BaseEventLoop, bk: list[dict[str, str]]) -> Callabl
     return gemini_inner
 
 
-async def loop_bullets(loop: asyncio.BaseEventLoop, q: multiprocessing.Queue, signal: QObject) -> None:
+async def loop_bullets(loop: asyncio.BaseEventLoop, q: Queue, signal: QObject) -> None:
     simple_bk = []
     llm = llm_clo(loop)
     while True:
@@ -259,7 +260,8 @@ class MainWindow(QWidget):
         self.layout.addWidget(self.web_window)
 
         self.loop = asyncio.get_event_loop()
-        self.q = multiprocessing.Manager().Queue()
+        # self.q = multiprocessing.Manager().Queue()
+        self.q = Queue()
         # sign thread
         self.back_thread = BackSignThread(self.loop, self.q)
         self.back_thread.start()
@@ -289,7 +291,7 @@ class MainWindow(QWidget):
 
 
 class BackSignThread(QThread):
-    def __init__(self, loop: asyncio.BaseEventLoop, q: multiprocessing.Queue, parent=None) -> None:
+    def __init__(self, loop: asyncio.BaseEventLoop, q: Queue, parent=None) -> None:
         super().__init__(parent)
         self.signal = BaseSignal()
         self.loop = loop
@@ -306,15 +308,17 @@ class BackSignThread(QThread):
         self.wait()
 
 
+# named process but QThread!
 class ProcessPlayAudio(QThread):
-    def __init__(self, q: multiprocessing.Queue ,parent=None) -> None:
+    def __init__(self, q: Queue ,parent=None) -> None:
         super().__init__(parent)
-        common.init_log("qt_audio_sub")
+        # common.init_log("qt_audio_sub")
         logging.info("qt audio process start")
         self.signal = AudioSignal()
         self.q = q
     
     def run(self) -> None:
+        logging.info("in process run")
         while True:
             audio = self.q.get()
             try:
