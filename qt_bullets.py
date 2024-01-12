@@ -25,23 +25,6 @@ from collections.abc import Callable
 import multiprocessing
 
 
-def process_play_audio(q: multiprocessing.Queue):
-    common.init_log("audio_sub")
-    logging.info("audio process start")
-    while True:
-        audio = q.get()
-        try:
-            temp_audio = io.BytesIO(audio)
-            rate, data = scipy.io.wavfile.read(temp_audio)
-            data = data * float(os.environ.get('VOLUME'))
-            sd.play(data, rate, blocking=True)
-        except Exception as e:
-            traceback.print_exc()
-            logging.error(f"play audio error {e}")
-        
-            
-
-
 def get_bullets(room_id:str) -> list[tuple[str, str]]:
     url = f"https://api.live.bilibili.com/xlive/web-room/v1/dM/gethistory?roomid={room_id}&room_type=0"
     # api return ten bullets
@@ -62,9 +45,9 @@ def get_bullets(room_id:str) -> list[tuple[str, str]]:
 
 
 @common.wrap_log_ts_async
-async def tts(text: str) -> None:
+async def tts(loop: asyncio.BaseEventLoop, q: multiprocessing.Queue, text: str) -> None:
     url = os.environ.get("TTS_ENDPOINT")
-    resp = await LOOP.run_in_executor(
+    resp = await loop.run_in_executor(
         None,
         functools.partial(
             requests.get,
@@ -76,14 +59,14 @@ async def tts(text: str) -> None:
                 "noise_scale_w": 0.8,
                 "length_scale": 1.0
             }))
-    Q.put(resp.content)
+    q.put(resp.content)
 
 
-def llm_clo() -> str:
+def llm_clo(loop: asyncio.BaseEventLoop) -> str:
     simple_gpt_bk = []
-    gpt = gpt_clo(simple_gpt_bk)
+    gpt = gpt_clo(loop, simple_gpt_bk)
     simple_gemini_bk = []
-    gemini = gemini_clo(simple_gemini_bk)
+    gemini = gemini_clo(loop, simple_gemini_bk)
     @common.wrap_log_ts_async
     async def llm_inner(text: str) -> str:
         common.lru_pop(simple_gpt_bk, simple_gemini_bk)
@@ -93,7 +76,7 @@ def llm_clo() -> str:
     return llm_inner
 
 
-def gpt_clo(bk: list[dict[str, str]]) -> Callable:
+def gpt_clo(loop: asyncio.BaseEventLoop, bk: list[dict[str, str]]) -> Callable:
     endpoint = os.environ.get("AZURE_ENDPOINT")
     api_key = os.environ.get("AZURE_API_KEY")
     model = os.environ.get("AZURE_MODEL")
@@ -117,7 +100,7 @@ def gpt_clo(bk: list[dict[str, str]]) -> Callable:
             "content": text
         }
         messages.append(new_message)
-        resp = await LOOP.run_in_executor(
+        resp = await loop.run_in_executor(
             None, 
             functools.partial(requests.post, 
             url=url,
@@ -141,7 +124,7 @@ def gpt_clo(bk: list[dict[str, str]]) -> Callable:
     return gpt_inner
 
 
-def gemini_clo(bk: list[dict[str, str]]) -> Callable:
+def gemini_clo(loop: asyncio.BaseEventLoop, bk: list[dict[str, str]]) -> Callable:
     endpoint = "https://generativelanguage.googleapis.com/"
     model = "gemini-pro:generateContent"
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -177,7 +160,7 @@ def gemini_clo(bk: list[dict[str, str]]) -> Callable:
             ]
         }
         contents.append(new_message)
-        resp = await LOOP.run_in_executor(
+        resp = await loop.run_in_executor(
             None,
             functools.partial(
                 requests.post,
@@ -199,9 +182,9 @@ def gemini_clo(bk: list[dict[str, str]]) -> Callable:
     return gemini_inner
 
 
-async def loop_bullets(signal: QObject) -> None:
+async def loop_bullets(loop: asyncio.BaseEventLoop, q: multiprocessing.Queue, signal: QObject) -> None:
     simple_bk = []
-    llm = llm_clo()
+    llm = llm_clo(loop)
     while True:
         start_ts = common.now_ts()
         try:
@@ -211,12 +194,12 @@ async def loop_bullets(signal: QObject) -> None:
                 text = re[i][1]
                 if text in simple_bk: continue
                 try:
-                    task_audio = asyncio.ensure_future(tts(text))
+                    task_audio = asyncio.ensure_future(tts(loop, q, text))
                     task_llm = asyncio.ensure_future(llm(text))
                     results = await asyncio.gather(task_audio, task_llm)
                     for result in results:
                         if result is None: continue
-                        await tts(result[:120])
+                        await tts(loop, q, result[:120])
                         signal.sig.emit(f"{text}<br>{result[:120]}")
                 except Exception as e:
                     logging.error(f"{e}")
@@ -233,6 +216,10 @@ async def loop_bullets(signal: QObject) -> None:
 
 
 class BaseSignal(QObject):
+    sig = Signal(str)
+
+
+class AudioSignal(QObject):
     sig = Signal(str)
 
 
@@ -270,42 +257,88 @@ class MainWindow(QWidget):
         # widget set
         self.layout.addWidget(self.text_edit)
         self.layout.addWidget(self.web_window)
+
+        self.loop = asyncio.get_event_loop()
+        self.q = multiprocessing.Manager().Queue()
         # sign thread
-        self.back_thread = BackSignThread()
+        self.back_thread = BackSignThread(self.loop, self.q)
         self.back_thread.start()
         self.back_thread.signal.sig.connect(self.signal_update)
+        # audio prcess
+        self.audio_process = ProcessPlayAudio(self.q)
+        self.audio_process.start()
+        self.audio_process.signal.sig.connect(self.audio_signal_update)
     
     def signal_update(self, data: str) -> None:
         self.text_edit.setHtml(data)
+    
+    def audio_signal_update(self, event: str) -> None:
+        if event == 'open' :
+            self.web_window.page().runJavaScript(f"custom.default('mouth', 1.0)")
+        else:
+            self.web_window.page().runJavaScript(f"custom.default('mouth', 0.0)")
+        pass
     
     # close 
     def closeEvent(self, event: QCloseEvent) -> None:
         logging.info("Close event")
         super().closeEvent(event)
         self.back_thread.terminate()
+        self.audio_process.terminate()
         self.close()
 
 
 class BackSignThread(QThread):
-    def __init__(self, parent=None) -> None:
+    def __init__(self, loop: asyncio.BaseEventLoop, q: multiprocessing.Queue, parent=None) -> None:
         super().__init__(parent)
         self.signal = BaseSignal()
+        self.loop = loop
+        self.q = q
 
     def run(self) -> None:
         logging.info("qt sign thread start")
-        LOOP.run_until_complete(loop_bullets(self.signal))
+        self.loop.run_until_complete(loop_bullets(self.loop, self.q, self.signal))
     
     # close
     def terminate(self) -> None:
         logging.info("terminate qt sign thread")
         super().terminate()
         self.wait()
+
+
+class ProcessPlayAudio(QThread):
+    def __init__(self, q: multiprocessing.Queue ,parent=None) -> None:
+        super().__init__(parent)
+        common.init_log("qt_audio_sub")
+        logging.info("qt audio process start")
+        self.signal = AudioSignal()
+        self.q = q
     
+    def run(self) -> None:
+        while True:
+            audio = self.q.get()
+            try:
+                temp_audio = io.BytesIO(audio)
+                rate, data = scipy.io.wavfile.read(temp_audio)
+                data = data * float(os.environ.get('VOLUME'))
+                self.signal.sig.emit("open")
+                sd.play(data, rate, blocking=True)
+                self.signal.sig.emit("close")
+            except Exception as e:
+                traceback.print_exc()
+                logging.error(f"play audio error {e}")
+    
+    # close
+    def terminate(self) -> None:
+        logging.info("terminate qt audio process")
+        super().terminate()
+        self.wait()
+
 
 def main() -> None:
     common.init_log("qt_")
-    p = multiprocessing.Process(target=process_play_audio, args=(Q,), daemon=True)
-    p.start()
+    # p = multiprocessing.Process(target=process_play_audio, args=(Q,), daemon=True)
+    # p.start()
     # pool = ProcessPoolExecutor(1)
     # task = pool.submit(process_play_audio, Q)
     app = QApplication(sys.argv)
@@ -316,9 +349,9 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
-        p.terminate()
-        p.join()
-        p.close()
+        # p.terminate()
+        # p.join()
+        # p.close()
         logging.info("End, close resources.")
         sys.exit(0)
 
@@ -327,6 +360,4 @@ if __name__ == '__main__':
     # kill process and qt process
     # signal.signal(signal.SIGINT, signal.SIG_DFL)
     multiprocessing.freeze_support()
-    LOOP = asyncio.get_event_loop()
-    Q = multiprocessing.Manager().Queue()
     main()
