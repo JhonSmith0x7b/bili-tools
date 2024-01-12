@@ -33,3 +33,6 @@ langid
 scipy
 python-dotenv
 sounddevice
+PySide6
+pyinstaller
+flask

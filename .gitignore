@@ -5,5 +5,11 @@
 *.model
 *.pth
 bert_vits2/data/
-.vscode
+.vscode/
 *.log
+dist/
+node_modules/
+*.spec
+build/
+live2d_sample/
+nltk_data/

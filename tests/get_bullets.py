@@ -188,6 +188,7 @@ def gemini_clo(bk: list[dict[str, str]]) -> Callable:
             re_message = resp.json()['candidates'][0]['content']
         except Exception as e:
             logging.error(f"gemini error, response is {resp.text}")
+            return error_prompt
         bk.append(new_message)
         bk.append(re_message)
         return re_message['parts'][0]['text']

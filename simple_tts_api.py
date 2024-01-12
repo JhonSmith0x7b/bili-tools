@@ -3,10 +3,7 @@ sys.path.append("./bert_vits2")
 import os
 import torch
 from bert_vits2 import utils
-from bert_vits2.text.cleaner import clean_text
-from bert_vits2.text import cleaned_text_to_sequence, get_bert
-from bert_vits2 import commons
-from bert_vits2.infer import infer, latest_version, get_net_g, get_text, infer_multilang
+from bert_vits2.infer import infer, latest_version, get_net_g, get_text
 import numpy
 import flask
 import json
@@ -42,31 +39,31 @@ net_g = get_net_g(
 )
 
 convert_map = {
-    "A": "艾",
+    "A": "厄",
     "B": "闭",
     "C": "啬",
     "D": "迪",
     "E": "衣",
-    "F": "爱福",
+    "F": "福",
     "G": "记",
-    "H": "艾吃",
+    "H": "吃",
     "I": "爱",
     "J": "这",
     "K": "客",
-    "L": "艾奥",
-    "M": "艾慕",
+    "L": "捱",
+    "M": "慕",
     "N": "嗯",
     "O": "鸥",
     "P": "屁",
     "Q": "秋",
     "R": "啊",
-    "S": "艾斯",
+    "S": "斯",
     "T": "踢",
     "U": "呦",
     "V": "喂",
-    "W": "大不流",
-    "X": "埃克斯",
-    "Y": "歪艾",
+    "W": "大",
+    "X": "斯",
+    "Y": "歪",
     "Z": "贼"
 }
 

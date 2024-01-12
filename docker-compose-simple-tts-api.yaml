@@ -1,0 +1,11 @@
+version: '3'
+services:
+  web:
+    image: torch-cpu
+    ports:
+      - 12303:12300
+    volumes:
+      - ./bert_vits2:/app/bert_vits2
+      - ./common:/app/common
+      - ./nltk_data:/usr/share/nltk_data
+      - ./.env:/app/.env
