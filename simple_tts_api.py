@@ -3,7 +3,8 @@ sys.path.append("./bert_vits2")
 import os
 import torch
 from bert_vits2 import utils
-from bert_vits2.infer import infer, latest_version, get_net_g, get_text
+from bert_vits2.infer import infer, latest_version, get_net_g, get_text, infer_multilang
+from bert_vits2.tools import sentence
 import numpy
 import flask
 import json
@@ -13,8 +14,9 @@ import datetime
 import scipy.io.wavfile
 import logging
 import common
+import numpy as np
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=True)
 
 
 device = (
@@ -28,7 +30,8 @@ device = (
     )
 if device == "mps":
     # os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-    device = "cpu"
+    # device = "cpu"
+    pass
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 print(device)
 model_path = os.environ.get("TTS_MODEL_PATH")
@@ -72,6 +75,24 @@ def en2cn(text: str):
     for c in text:
         new_text += convert_map.get(c.upper(), c)
     return new_text
+
+
+def process_auto(text):
+    _text, _lang = [], []
+    for slice in text.split("|"):
+        if slice == "":
+            continue
+        temp_text, temp_lang = [], []
+        sentences_list = sentence.split_by_language(slice, target_languages=["zh", "ja", "en"])
+        for sentence, lang in sentences_list:
+            if sentence == "":
+                continue
+            temp_text.append(sentence)
+            temp_lang.append(lang.upper())
+        _text.append(temp_text)
+        _lang.append(temp_lang)
+    return _text, _lang
+
 
 @common.wrap_log_ts
 def simple_audio(
@@ -131,6 +152,41 @@ def simple_audio(
     return (audio, hps.data.sampling_rate)
 
 
+def simple_audio_v2(
+    text: str,
+    sdp_ratio: float = 0.2,
+    noise_scale: float = 0.6,
+    noise_scale_w: float = 0.8,
+    length_scale: float = 1.0
+) -> tuple[numpy.ndarray, int]:
+    _text, _lang = process_auto(text)
+    sid = list(hps.data.spk2id.keys())[0]
+    audio_list = []
+    for idx, piece in enumerate(_text):
+        skip_start = idx != 0
+        skip_end = idx != len(_text) - 1
+        audio = infer_multilang(
+            piece,
+            reference_audio=None,
+            emotion=None,
+            sdp_ratio=sdp_ratio,
+            noise_scale=noise_scale,
+            noise_scale_w=noise_scale_w,
+            length_scale=length_scale,
+            sid=sid,
+            language=_lang[idx],
+            hps=hps,
+            net_g=net_g,
+            device=device,
+            skip_start=skip_start,
+            skip_end=skip_end,
+        )
+        audio_list.append(audio)
+    audio_concat = np.concatenate(audio_list)
+    del audio_list, _text, _lang, audio_concat
+    return (audio_concat, hps.data.sampling_rate)
+
+
 app = flask.Flask(__name__)
 
 
@@ -148,7 +204,10 @@ def simple_tts() -> flask.Response:
         noise_scale_w = 0.8
         length_scale = 1.0
     text = requests.utils.unquote(text)
-    audio, rate = simple_audio(text, sdp_ratio=sdp_ratio, noise_scale=noise_scale, noise_scale_w=noise_scale_w, length_scale=length_scale)
+    if int(version.replace(".", "")) < 20:
+        audio, rate = simple_audio(text, sdp_ratio=sdp_ratio, noise_scale=noise_scale, noise_scale_w=noise_scale_w, length_scale=length_scale)
+    else:
+        audio, rate = simple_audio_v2(text, sdp_ratio=sdp_ratio, noise_scale=noise_scale, noise_scale_w=noise_scale_w, length_scale=length_scale)
     audio_buffer = io.BytesIO()
     scipy.io.wavfile.write(audio_buffer, rate, audio)
     return flask.send_file(
