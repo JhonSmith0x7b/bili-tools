@@ -4,7 +4,7 @@ import os
 import torch
 from bert_vits2 import utils
 from bert_vits2.infer import infer, latest_version, get_net_g, get_text, infer_multilang
-from bert_vits2.tools import sentence
+from bert_vits2.tools.sentence import split_by_language
 import numpy
 import flask
 import json
@@ -83,7 +83,7 @@ def process_auto(text):
         if slice == "":
             continue
         temp_text, temp_lang = [], []
-        sentences_list = sentence.split_by_language(slice, target_languages=["zh", "ja", "en"])
+        sentences_list = split_by_language(slice, target_languages=["zh", "ja", "en"])
         for sentence, lang in sentences_list:
             if sentence == "":
                 continue
@@ -183,7 +183,7 @@ def simple_audio_v2(
         )
         audio_list.append(audio)
     audio_concat = np.concatenate(audio_list)
-    del audio_list, _text, _lang, audio_concat
+    del audio_list, _text, _lang
     return (audio_concat, hps.data.sampling_rate)
 
 

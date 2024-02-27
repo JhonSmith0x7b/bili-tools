@@ -7,10 +7,10 @@
     1.1.1-fix： 1.1.1版本训练的模型，但是在推理时使用dev的日语修复
     2.2：当前版本
 """
+
 import torch
 import commons
-from text import cleaned_text_to_sequence, get_bert
-from clap_wrapper import get_clap_audio_feature, get_clap_text_feature
+from text import cleaned_text_to_sequence
 from text.cleaner import clean_text
 import utils
 import numpy as np

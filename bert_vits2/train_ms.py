@@ -13,7 +13,6 @@ import logging
 from config import config
 import argparse
 import datetime
-import gc
 
 logging.getLogger("numba").setLevel(logging.WARNING)
 import commons
@@ -41,7 +40,7 @@ from text.symbols import symbols
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = (
-    True  # If encontered training problem,please try to disable TF32.
+    True  # If encountered training problem,please try to disable TF32.
 )
 torch.set_float32_matmul_precision("medium")
 torch.backends.cuda.sdp_kernel("flash")
@@ -103,7 +102,7 @@ def run():
     args = parser.parse_args()
     model_dir = os.path.join(args.model, config.train_ms_config.model)
     if not os.path.exists(model_dir):
-        os.makedirs(model_dir)
+        os.makedirs(model_dir, exist_ok=True)
     hps = utils.get_hparams_from_file(args.config)
     hps.model_dir = model_dir
     # 比较路径是否相同
@@ -274,9 +273,9 @@ def run():
                 utils.latest_checkpoint_path(hps.model_dir, "DUR_*.pth"),
                 net_dur_disc,
                 optim_dur_disc,
-                skip_optimizer=hps.train.skip_optimizer
-                if "skip_optimizer" in hps.train
-                else True,
+                skip_optimizer=(
+                    hps.train.skip_optimizer if "skip_optimizer" in hps.train else True
+                ),
             )
             if not optim_dur_disc.param_groups[0].get("initial_lr"):
                 optim_dur_disc.param_groups[0]["initial_lr"] = dur_resume_lr
@@ -288,17 +287,17 @@ def run():
             utils.latest_checkpoint_path(hps.model_dir, "G_*.pth"),
             net_g,
             optim_g,
-            skip_optimizer=hps.train.skip_optimizer
-            if "skip_optimizer" in hps.train
-            else True,
+            skip_optimizer=(
+                hps.train.skip_optimizer if "skip_optimizer" in hps.train else True
+            ),
         )
         _, optim_d, d_resume_lr, epoch_str = utils.load_checkpoint(
             utils.latest_checkpoint_path(hps.model_dir, "D_*.pth"),
             net_d,
             optim_d,
-            skip_optimizer=hps.train.skip_optimizer
-            if "skip_optimizer" in hps.train
-            else True,
+            skip_optimizer=(
+                hps.train.skip_optimizer if "skip_optimizer" in hps.train else True
+            ),
         )
         if not optim_g.param_groups[0].get("initial_lr"):
             optim_g.param_groups[0]["initial_lr"] = g_resume_lr
@@ -323,9 +322,9 @@ def run():
             utils.latest_checkpoint_path(hps.model_dir, "WD_*.pth"),
             net_wd,
             optim_wd,
-            skip_optimizer=hps.train.skip_optimizer
-            if "skip_optimizer" in hps.train
-            else True,
+            skip_optimizer=(
+                hps.train.skip_optimizer if "skip_optimizer" in hps.train else True
+            ),
         )
         if not optim_wd.param_groups[0].get("initial_lr"):
             optim_wd.param_groups[0]["initial_lr"] = wd_resume_lr
@@ -349,6 +348,13 @@ def run():
         scheduler_dur_disc = None
     scaler = GradScaler(enabled=hps.train.bf16_run)
 
+    wl = WavLMLoss(
+        hps.model.slm.model,
+        net_wd,
+        hps.data.sampling_rate,
+        hps.model.slm.sr,
+    ).to(local_rank)
+
     for epoch in range(epoch_str, hps.train.epochs + 1):
         if rank == 0:
             train_and_evaluate(
@@ -356,7 +362,7 @@ def run():
                 local_rank,
                 epoch,
                 hps,
-                [net_g, net_d, net_dur_disc, net_wd],
+                [net_g, net_d, net_dur_disc, net_wd, wl],
                 [optim_g, optim_d, optim_dur_disc, optim_wd],
                 [scheduler_g, scheduler_d, scheduler_dur_disc, scheduler_wd],
                 scaler,
@@ -370,7 +376,7 @@ def run():
                 local_rank,
                 epoch,
                 hps,
-                [net_g, net_d, net_dur_disc, net_wd],
+                [net_g, net_d, net_dur_disc, net_wd, wl],
                 [optim_g, optim_d, optim_dur_disc, optim_wd],
                 [scheduler_g, scheduler_d, scheduler_dur_disc, scheduler_wd],
                 scaler,
@@ -380,6 +386,7 @@ def run():
             )
         scheduler_g.step()
         scheduler_d.step()
+        scheduler_wd.step()
         if net_dur_disc is not None:
             scheduler_dur_disc.step()
 
@@ -397,18 +404,12 @@ def train_and_evaluate(
     logger,
     writers,
 ):
-    net_g, net_d, net_dur_disc, net_wd = nets
+    net_g, net_d, net_dur_disc, net_wd, wl = nets
     optim_g, optim_d, optim_dur_disc, optim_wd = optims
     scheduler_g, scheduler_d, scheduler_dur_disc, scheduler_wd = schedulers
     train_loader, eval_loader = loaders
     if writers is not None:
         writer, writer_eval = writers
-    wl = WavLMLoss(
-        hps.model.slm.model,
-        net_wd,
-        hps.data.sampling_rate,
-        hps.model.slm.sr,
-    ).to(local_rank)
 
     train_loader.batch_sampler.set_epoch(epoch)
     global global_step
@@ -732,8 +733,8 @@ def train_and_evaluate(
 
         global_step += 1
 
-    gc.collect()
-    torch.cuda.empty_cache()
+    # gc.collect()
+    # torch.cuda.empty_cache()
     if rank == 0:
         logger.info("====> Epoch: {}".format(epoch))
 

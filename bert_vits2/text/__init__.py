@@ -46,7 +46,7 @@ def check_bert_models():
     with open("./bert_vits2/bert/bert_models.json", "r") as fp:
         models = json.load(fp)
         for k, v in models.items():
-            local_path = Path("./bert_vits2/bert").joinpath(k)
+            local_path = Path("./bert").joinpath(k)
             _check_bert(v["repo_id"], v["files"], local_path)
 
 
@@ -57,6 +57,7 @@ def init_openjtalk():
         import pyopenjtalk
 
         pyopenjtalk.g2p("こんにちは，世界。")
+
 
 init_openjtalk()
 check_bert_models()

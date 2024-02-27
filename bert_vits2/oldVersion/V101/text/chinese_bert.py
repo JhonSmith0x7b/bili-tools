@@ -12,8 +12,8 @@ device = torch.device(
     )
 )
 
-tokenizer = AutoTokenizer.from_pretrained("./bert_vits2/bert/chinese-roberta-wwm-ext-large")
-model = AutoModelForMaskedLM.from_pretrained("./bert_vits2/bert/chinese-roberta-wwm-ext-large").to(
+tokenizer = AutoTokenizer.from_pretrained("./bert/chinese-roberta-wwm-ext-large")
+model = AutoModelForMaskedLM.from_pretrained("./bert/chinese-roberta-wwm-ext-large").to(
     device
 )
 

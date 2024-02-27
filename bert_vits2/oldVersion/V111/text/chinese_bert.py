@@ -2,7 +2,7 @@ import torch
 import sys
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 
-tokenizer = AutoTokenizer.from_pretrained("./bert_vits2/bert/chinese-roberta-wwm-ext-large")
+tokenizer = AutoTokenizer.from_pretrained("./bert/chinese-roberta-wwm-ext-large")
 
 models = dict()
 
@@ -18,7 +18,7 @@ def get_bert_feature(text, word2ph, device=None):
         device = "cuda"
     if device not in models.keys():
         models[device] = AutoModelForMaskedLM.from_pretrained(
-            "./bert_vits2/bert/chinese-roberta-wwm-ext-large"
+            "./bert/chinese-roberta-wwm-ext-large"
         ).to(device)
     with torch.no_grad():
         inputs = tokenizer(text, return_tensors="pt")

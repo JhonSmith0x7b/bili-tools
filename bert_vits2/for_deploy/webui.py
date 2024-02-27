@@ -38,15 +38,15 @@ os.environ["MKL_NUM_THREADS"] = "1"
 
 bert_feature_map = {
     "ZH": BertFeature(
-        "./bert_vits2/bert/chinese-roberta-wwm-ext-large",
+        "./bert/chinese-roberta-wwm-ext-large",
         language="ZH",
     ),
     "JP": BertFeature(
-        "./bert_vits2/bert/deberta-v2-large-japanese-char-wwm",
+        "./bert/deberta-v2-large-japanese-char-wwm",
         language="JP",
     ),
     "EN": BertFeature(
-        "./bert_vits2/bert/deberta-v3-large",
+        "./bert/deberta-v3-large",
         language="EN",
     ),
 }
