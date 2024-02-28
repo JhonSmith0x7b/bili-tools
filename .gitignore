@@ -13,3 +13,4 @@ node_modules/
 build/
 live2d_sample/
 nltk_data/
+*.safetensors

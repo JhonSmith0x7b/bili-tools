@@ -3,7 +3,7 @@ sys.path.append("./bert_vits2")
 import os
 import torch
 from bert_vits2 import utils
-from bert_vits2.infer import infer, latest_version, get_net_g, get_text, infer_multilang
+from bert_vits2.infer import infer, latest_version, get_net_g, get_text
 from bert_vits2.tools.sentence import split_by_language
 import numpy
 import flask
@@ -16,6 +16,7 @@ import logging
 import common
 import numpy as np
 from dotenv import load_dotenv
+from bert_vits2.oldVersion.V220.clap_wrapper import get_clap_text_feature
 load_dotenv(override=True)
 
 
@@ -94,6 +95,146 @@ def process_auto(text):
     return _text, _lang
 
 
+def infer_multilang(
+    text,
+    sdp_ratio,
+    noise_scale,
+    noise_scale_w,
+    length_scale,
+    sid,
+    language,
+    hps,
+    net_g,
+    device,
+    reference_audio=None,
+    emotion=None,
+    skip_start=False,
+    skip_end=False,
+):
+    bert, ja_bert, en_bert, phones, tones, lang_ids = [], [], [], [], [], []
+    # emo = get_emo_(reference_audio, emotion, sid)
+    # if isinstance(reference_audio, np.ndarray):
+    #     emo = get_clap_audio_feature(reference_audio, device)
+    # else:
+    #     emo = get_clap_text_feature(emotion, device)
+    # emo = torch.squeeze(emo, dim=1)
+    for idx, (txt, lang) in enumerate(zip(text, language)):
+        _skip_start = (idx != 0) or (skip_start and idx == 0)
+        _skip_end = (idx != len(language) - 1) or skip_end
+        (
+            temp_bert,
+            temp_ja_bert,
+            temp_en_bert,
+            temp_phones,
+            temp_tones,
+            temp_lang_ids,
+        ) = get_text(txt, lang, hps, device)
+        if _skip_start:
+            temp_bert = temp_bert[:, 3:]
+            temp_ja_bert = temp_ja_bert[:, 3:]
+            temp_en_bert = temp_en_bert[:, 3:]
+            temp_phones = temp_phones[3:]
+            temp_tones = temp_tones[3:]
+            temp_lang_ids = temp_lang_ids[3:]
+        if _skip_end:
+            temp_bert = temp_bert[:, :-2]
+            temp_ja_bert = temp_ja_bert[:, :-2]
+            temp_en_bert = temp_en_bert[:, :-2]
+            temp_phones = temp_phones[:-2]
+            temp_tones = temp_tones[:-2]
+            temp_lang_ids = temp_lang_ids[:-2]
+        bert.append(temp_bert)
+        ja_bert.append(temp_ja_bert)
+        en_bert.append(temp_en_bert)
+        phones.append(temp_phones)
+        tones.append(temp_tones)
+        lang_ids.append(temp_lang_ids)
+    bert = torch.concatenate(bert, dim=1)
+    ja_bert = torch.concatenate(ja_bert, dim=1)
+    en_bert = torch.concatenate(en_bert, dim=1)
+    phones = torch.concatenate(phones, dim=0)
+    tones = torch.concatenate(tones, dim=0)
+    lang_ids = torch.concatenate(lang_ids, dim=0)
+    with torch.no_grad():
+        x_tst = phones.to(device).unsqueeze(0)
+        tones = tones.to(device).unsqueeze(0)
+        lang_ids = lang_ids.to(device).unsqueeze(0)
+        bert = bert.to(device).unsqueeze(0)
+        ja_bert = ja_bert.to(device).unsqueeze(0)
+        en_bert = en_bert.to(device).unsqueeze(0)
+        # emo = emo.to(device).unsqueeze(0)
+        x_tst_lengths = torch.LongTensor([phones.size(0)]).to(device)
+        del phones
+        speakers = torch.LongTensor([hps.data.spk2id[sid]]).to(device)
+        if version == '2.2.2':
+            emotion = "Happy"
+            emo = get_clap_text_feature(emotion, device)
+            emo = torch.squeeze(emo, dim=1)
+            audio = (
+                net_g.infer(
+                    x_tst,
+                    x_tst_lengths,
+                    speakers,
+                    tones,
+                    lang_ids,
+                    bert,
+                    ja_bert,
+                    en_bert,
+                    emo=emo,
+                    sdp_ratio=sdp_ratio,
+                    noise_scale=noise_scale,
+                    noise_scale_w=noise_scale_w,
+                    length_scale=length_scale,
+                )[0][0, 0]
+                .data.cpu()
+                .float()
+                .numpy()
+            )
+            del (
+                x_tst,
+                tones,
+                lang_ids,
+                bert,
+                x_tst_lengths,
+                speakers,
+                ja_bert,
+                en_bert,
+            ) 
+        else:
+            audio = (
+                net_g.infer(
+                    x_tst,
+                    x_tst_lengths,
+                    speakers,
+                    tones,
+                    lang_ids,
+                    bert,
+                    ja_bert,
+                    en_bert,
+                    sdp_ratio=sdp_ratio,
+                    noise_scale=noise_scale,
+                    noise_scale_w=noise_scale_w,
+                    length_scale=length_scale,
+                )[0][0, 0]
+                .data.cpu()
+                .float()
+                .numpy()
+            )
+            del (
+                x_tst,
+                tones,
+                lang_ids,
+                bert,
+                x_tst_lengths,
+                speakers,
+                ja_bert,
+                en_bert,
+            )  # , emo
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        return audio
+
+
 @common.wrap_log_ts
 def simple_audio(
     text: str,
@@ -127,7 +268,7 @@ def simple_audio(
         net_g=net_g,
         device=device,
         reference_audio=None,
-        emotion=None,
+        emotion="Happy",
         skip_start=False,
         skip_end=False
     )
@@ -151,7 +292,7 @@ def simple_audio(
     del x_tst, tones, lang_ids, bert, x_tst_lengths, speakers, ja_bert, en_bert
     return (audio, hps.data.sampling_rate)
 
-
+@common.wrap_log_ts
 def simple_audio_v2(
     text: str,
     sdp_ratio: float = 0.2,
@@ -204,7 +345,7 @@ def simple_tts() -> flask.Response:
         noise_scale_w = 0.8
         length_scale = 1.0
     text = requests.utils.unquote(text)
-    if int(version.replace(".", "")) < 20:
+    if int(version.replace(".", "")) < 23:
         audio, rate = simple_audio(text, sdp_ratio=sdp_ratio, noise_scale=noise_scale, noise_scale_w=noise_scale_w, length_scale=length_scale)
     else:
         audio, rate = simple_audio_v2(text, sdp_ratio=sdp_ratio, noise_scale=noise_scale, noise_scale_w=noise_scale_w, length_scale=length_scale)
